@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Company Map with Leaflet</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Leaflet CSS & JS -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+    />
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+
+    <!-- Leaflet GeoJSON world boundaries -->
+    <script src="https://unpkg.com/leaflet-ajax"></script>
+
+    <style>
+      #map {
+        height: 100vh;
+      }
+      .country-tooltip {
+        font-size: 14px;
+        background: white;
+        border: 1px solid gray;
+        padding: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <script>
+      // Initialize map
+      var map = L.map("map").setView([20, 0], 2);
+
+      // Add base tile layer
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors",
+      }).addTo(map);
+
+      // Example company activity per country (ISO A3 code)
+      const companyActivity = {
+        SEN: "Hello There",
+        AGO: "General Kenobi, you are a bold one",
+        CAN: "Back away, I will deal with this Jedi slime myself",
+        ARE: "Your move",
+        EGY: "You fool, I've been trained in your Jedi arts by Count Dooku",
+        GBR: "Attack, Kenobi",
+      };
+
+      // Load GeoJSON world boundaries (you can also host your own or fetch dynamically)
+      fetch(
+        "https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json"
+      )
+        .then((res) => res.json())
+        .then((data) => {
+          L.geoJSON(data, {
+            style: function (feature) {
+              return {
+                fillColor: "#74c476",
+                weight: 1,
+                color: "white",
+                fillOpacity: 0.6,
+              };
+            },
+            onEachFeature: function (feature, layer) {
+              const iso = feature.id; // e.g., "USA", "GBR"
+              const name = feature.properties.name;
+              const activity = companyActivity[iso];
+
+              if (activity) {
+                layer.bindTooltip(`<strong>${name}</strong><br>${activity}`, {
+                  sticky: true,
+                  direction: "top",
+                  className: "country-tooltip",
+                });
+
+                layer.on({
+                  mouseover: function (e) {
+                    layer.setStyle({ fillOpacity: 0.9 });
+                  },
+                  mouseout: function (e) {
+                    layer.setStyle({ fillOpacity: 0.6 });
+                  },
+                });
+              }
+            },
+          }).addTo(map);
+        });
+    </script>
+  </body>
+</html>
