@@ -1,10 +1,7 @@
-<!-- This program creates an interactive map using Leaflet.js and the Web Speech API. and displays
-country and city information with speech synthesis. -->
-
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Interactive Map with Speech</title>
+    <title>Custom Interactive World Map</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link
@@ -17,92 +14,89 @@ country and city information with speech synthesis. -->
         height: 100vh;
         width: 100%;
       }
-
       .tooltip-style {
         font-size: 14px;
         background: white;
         border: 1px solid gray;
         padding: 4px;
       }
-
-      #voiceSelector {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        z-index: 1000;
-        background: white;
-        padding: 6px;
-        font-size: 14px;
-        border-radius: 4px;
-        box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
-      }
     </style>
   </head>
   <body>
-    <select id="voiceSelector"></select>
     <div id="map"></div>
 
     <script>
-      const map = L.map("map").setView([20, 0], 2);
-      map.zoomControl.setPosition("bottomleft"); // Move zoom buttons
+      const map = L.map("map", {
+        minZoom: 2,
+        maxZoom: 5,
+      }).setView([20, 0], 2);
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap contributors",
       }).addTo(map);
 
-      const countryDescriptions = {
-        SEN: "Hello There",
-        AGO: "General Kenobi, you are a bold one",
-        CAN: "Back away, I will deal with this Jedi slime myself",
-        EGY: "Your move",
+      const countriesToShow = {
+        GBR: {
+          color: "#ff6f61",
+          desc: "United Kingdom - Dynamic and historic.",
+        },
+        EGY: { color: "#6a5acd", desc: "Egypt - Ancient and inspiring." },
+        AGO: { color: "#2ecc71", desc: "Angola - Vibrant and growing." },
+        SEN: { color: "#f1c40f", desc: "Senegal - Energetic and diverse." },
+        CAN: { color: "#3498db", desc: "Canada - Strong and welcoming." },
+        ARE: { color: "#e67e22", desc: "Dubai, UAE - Modern and ambitious." },
       };
 
-      const cityDescriptions = [
-        {
-          name: "London, UK",
-          lat: 51.5074,
-          lon: -0.1278,
-          description:
-            "You fool, I've been trained in your Jedi arts by Count Dooku",
-        },
-        {
-          name: "Dubai, UAE",
-          lat: 25.276987,
-          lon: 55.296249,
-          description: "Attack, Kenobi",
-        },
-      ];
+      fetch(
+        "https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json"
+      )
+        .then((res) => res.json())
+        .then((data) => {
+          L.geoJSON(data, {
+            style: (feature) => {
+              const country = countriesToShow[feature.id];
+              return {
+                fillColor: country ? country.color : "#ccc",
+                weight: 1,
+                color: "#fff",
+                fillOpacity: country ? 0.7 : 0,
+              };
+            },
+            filter: (feature) => !!countriesToShow[feature.id],
+            onEachFeature: (feature, layer) => {
+              const country = countriesToShow[feature.id];
+              if (country) {
+                layer.bindTooltip(
+                  `<strong>${feature.properties.name}</strong><br>${country.desc}`,
+                  { sticky: true, className: "tooltip-style" }
+                );
 
-      const voiceSelector = document.getElementById("voiceSelector");
+                layer.on("mouseover", () => {
+                  layer.setStyle({ fillOpacity: 1 });
+                  speak(country.desc);
+                });
+
+                layer.on("mouseout", () => {
+                  layer.setStyle({ fillOpacity: 0.7 });
+                  speechSynthesis.cancel();
+                  isSpeaking = false;
+                });
+              }
+            },
+          }).addTo(map);
+        });
+
       let voices = [];
       let selectedVoice = null;
       let isSpeaking = false;
 
-      function populateVoiceList() {
+      function populateVoices() {
         voices = speechSynthesis.getVoices();
-        voiceSelector.innerHTML = "";
-
-        voices.forEach((voice, index) => {
-          const option = document.createElement("option");
-          option.value = index;
-          option.textContent = `${voice.name} (${voice.lang})${
-            voice.default ? " — Default" : ""
-          }`;
-          voiceSelector.appendChild(option);
-        });
-
-        const preferredIndex = voices.findIndex((v) => v.lang === "en-GB") || 0;
-        voiceSelector.value = preferredIndex;
-        selectedVoice = voices[preferredIndex];
+        selectedVoice = voices.find((v) => v.lang === "en-GB") || voices[0];
       }
 
-      speechSynthesis.onvoiceschanged = populateVoiceList;
-      populateVoiceList();
-
-      voiceSelector.addEventListener("change", () => {
-        const index = parseInt(voiceSelector.value);
-        selectedVoice = voices[index];
-      });
+      speechSynthesis.onvoiceschanged = populateVoices;
+      populateVoices();
 
       function speak(text) {
         if (!text || !selectedVoice) return;
@@ -127,75 +121,6 @@ country and city information with speech synthesis. -->
 
         speechSynthesis.speak(utter);
       }
-
-      fetch(
-        "https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json"
-      )
-        .then((res) => res.json())
-        .then((data) => {
-          L.geoJSON(data, {
-            style: (feature) => ({
-              fillColor: countryDescriptions[feature.id] ? "#3498db" : "#ccc",
-              weight: 1,
-              color: "#fff",
-              fillOpacity: countryDescriptions[feature.id] ? 0.5 : 0.1,
-            }),
-            onEachFeature: (feature, layer) => {
-              const iso = feature.id;
-              const desc = countryDescriptions[iso];
-
-              if (desc) {
-                layer.bindTooltip(
-                  `<strong>${feature.properties.name}</strong><br>${desc}`,
-                  {
-                    sticky: true,
-                    className: "tooltip-style",
-                  }
-                );
-
-                layer.on("mouseover", () => {
-                  layer.setStyle({ fillOpacity: 0.8 });
-                  speak(desc);
-                });
-
-                layer.on("mouseout", () => {
-                  layer.setStyle({ fillOpacity: 0.5 });
-                  speechSynthesis.cancel();
-                  isSpeaking = false;
-                });
-              }
-            },
-          }).addTo(map);
-
-          cityDescriptions.forEach((city) => {
-            const marker = L.circleMarker([city.lat, city.lon], {
-              radius: 6,
-              fillColor: "#e67e22",
-              color: "#000",
-              weight: 1,
-              opacity: 1,
-              fillOpacity: 0.9,
-            }).addTo(map);
-
-            marker.bindTooltip(
-              `<strong>${city.name}</strong><br>${city.description}`,
-              {
-                sticky: true,
-                className: "tooltip-style",
-              }
-            );
-
-            marker.on("mouseover", () => speak(city.description));
-            marker.on("mouseout", () => {
-              speechSynthesis.cancel();
-              isSpeaking = false;
-            });
-          });
-        })
-        .catch((err) => {
-          console.error("Error loading GeoJSON:", err);
-          alert("Could not load map data.");
-        });
     </script>
   </body>
 </html>
