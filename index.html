@@ -44,6 +44,7 @@ country and city information with speech synthesis. -->
 
     <script>
       const map = L.map("map").setView([20, 0], 2);
+      map.zoomControl.setPosition("bottomleft"); // ✅ Move zoom buttons
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap contributors",
@@ -72,10 +73,10 @@ country and city information with speech synthesis. -->
         },
       ];
 
+      const voiceSelector = document.getElementById("voiceSelector");
       let voices = [];
       let selectedVoice = null;
-
-      const voiceSelector = document.getElementById("voiceSelector");
+      let isSpeaking = false;
 
       function populateVoiceList() {
         voices = speechSynthesis.getVoices();
@@ -90,13 +91,11 @@ country and city information with speech synthesis. -->
           voiceSelector.appendChild(option);
         });
 
-        // Auto-select en-GB or fallback to default
-        const preferred = voices.findIndex((v) => v.lang === "en-GB") || 0;
-        voiceSelector.value = preferred;
-        selectedVoice = voices[preferred];
+        const preferredIndex = voices.findIndex((v) => v.lang === "en-GB") || 0;
+        voiceSelector.value = preferredIndex;
+        selectedVoice = voices[preferredIndex];
       }
 
-      // Wait for voices to be loaded
       speechSynthesis.onvoiceschanged = populateVoiceList;
       populateVoiceList();
 
@@ -106,12 +105,27 @@ country and city information with speech synthesis. -->
       });
 
       function speak(text) {
-        speechSynthesis.cancel();
         if (!text || !selectedVoice) return;
 
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.voice = selectedVoice;
-        speechSynthesis.speak(utterance);
+        if (isSpeaking) {
+          speechSynthesis.cancel();
+          isSpeaking = false;
+        }
+
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.voice = selectedVoice;
+
+        utter.onstart = () => {
+          isSpeaking = true;
+        };
+        utter.onend = () => {
+          isSpeaking = false;
+        };
+        utter.onerror = () => {
+          isSpeaking = false;
+        };
+
+        speechSynthesis.speak(utter);
       }
 
       fetch(
@@ -133,7 +147,10 @@ country and city information with speech synthesis. -->
               if (desc) {
                 layer.bindTooltip(
                   `<strong>${feature.properties.name}</strong><br>${desc}`,
-                  { sticky: true, className: "tooltip-style" }
+                  {
+                    sticky: true,
+                    className: "tooltip-style",
+                  }
                 );
 
                 layer.on("mouseover", () => {
@@ -144,6 +161,7 @@ country and city information with speech synthesis. -->
                 layer.on("mouseout", () => {
                   layer.setStyle({ fillOpacity: 0.5 });
                   speechSynthesis.cancel();
+                  isSpeaking = false;
                 });
               }
             },
@@ -161,16 +179,22 @@ country and city information with speech synthesis. -->
 
             marker.bindTooltip(
               `<strong>${city.name}</strong><br>${city.description}`,
-              { sticky: true, className: "tooltip-style" }
+              {
+                sticky: true,
+                className: "tooltip-style",
+              }
             );
 
             marker.on("mouseover", () => speak(city.description));
-            marker.on("mouseout", () => speechSynthesis.cancel());
+            marker.on("mouseout", () => {
+              speechSynthesis.cancel();
+              isSpeaking = false;
+            });
           });
         })
-        .catch((error) => {
-          console.error("Failed to load GeoJSON:", error);
-          alert("Map data could not be loaded.");
+        .catch((err) => {
+          console.error("Error loading GeoJSON:", err);
+          alert("Could not load map data.");
         });
     </script>
   </body>
