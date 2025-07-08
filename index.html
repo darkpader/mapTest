@@ -1,3 +1,6 @@
+<!-- This program creates an interactive map using Leaflet.js and the Web Speech API. and displays
+country and city information with speech synthesis. -->
+
 <!DOCTYPE html>
 <html>
   <head>
@@ -12,26 +15,41 @@
     <style>
       #map {
         height: 100vh;
+        width: 100%;
       }
+
       .tooltip-style {
         font-size: 14px;
         background: white;
         border: 1px solid gray;
         padding: 4px;
       }
+
+      #voiceSelector {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 1000;
+        background: white;
+        padding: 6px;
+        font-size: 14px;
+        border-radius: 4px;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+      }
     </style>
   </head>
   <body>
+    <select id="voiceSelector"></select>
     <div id="map"></div>
 
     <script>
       const map = L.map("map").setView([20, 0], 2);
+      map.zoomControl.setPosition("bottomleft"); // ✅ Move zoom buttons
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap contributors",
       }).addTo(map);
 
-      // Country ISO -> Description
       const countryDescriptions = {
         SEN: "Hello There",
         AGO: "General Kenobi, you are a bold one",
@@ -39,7 +57,6 @@
         EGY: "Your move",
       };
 
-      // Cities with coordinates and descriptions
       const cityDescriptions = [
         {
           name: "London, UK",
@@ -56,20 +73,66 @@
         },
       ];
 
-      // Function to speak text
+      const voiceSelector = document.getElementById("voiceSelector");
+      let voices = [];
+      let selectedVoice = null;
+      let isSpeaking = false;
+
+      function populateVoiceList() {
+        voices = speechSynthesis.getVoices();
+        voiceSelector.innerHTML = "";
+
+        voices.forEach((voice, index) => {
+          const option = document.createElement("option");
+          option.value = index;
+          option.textContent = `${voice.name} (${voice.lang})${
+            voice.default ? " — Default" : ""
+          }`;
+          voiceSelector.appendChild(option);
+        });
+
+        const preferredIndex = voices.findIndex((v) => v.lang === "en-GB") || 0;
+        voiceSelector.value = preferredIndex;
+        selectedVoice = voices[preferredIndex];
+      }
+
+      speechSynthesis.onvoiceschanged = populateVoiceList;
+      populateVoiceList();
+
+      voiceSelector.addEventListener("change", () => {
+        const index = parseInt(voiceSelector.value);
+        selectedVoice = voices[index];
+      });
+
       function speak(text) {
-        speechSynthesis.cancel(); // Stop previous speech
+        if (!text || !selectedVoice) return;
+
+        if (isSpeaking) {
+          speechSynthesis.cancel();
+          isSpeaking = false;
+        }
+
         const utter = new SpeechSynthesisUtterance(text);
+        utter.voice = selectedVoice;
+
+        utter.onstart = () => {
+          isSpeaking = true;
+        };
+        utter.onend = () => {
+          isSpeaking = false;
+        };
+        utter.onerror = () => {
+          isSpeaking = false;
+        };
+
         speechSynthesis.speak(utter);
       }
 
-      // Load GeoJSON country boundaries
       fetch(
         "https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json"
       )
         .then((res) => res.json())
         .then((data) => {
-          // Add countries first
           L.geoJSON(data, {
             style: (feature) => ({
               fillColor: countryDescriptions[feature.id] ? "#3498db" : "#ccc",
@@ -80,6 +143,7 @@
             onEachFeature: (feature, layer) => {
               const iso = feature.id;
               const desc = countryDescriptions[iso];
+
               if (desc) {
                 layer.bindTooltip(
                   `<strong>${feature.properties.name}</strong><br>${desc}`,
@@ -93,15 +157,16 @@
                   layer.setStyle({ fillOpacity: 0.8 });
                   speak(desc);
                 });
+
                 layer.on("mouseout", () => {
                   layer.setStyle({ fillOpacity: 0.5 });
                   speechSynthesis.cancel();
+                  isSpeaking = false;
                 });
               }
             },
           }).addTo(map);
 
-          // Add city markers after countries so they appear on top
           cityDescriptions.forEach((city) => {
             const marker = L.circleMarker([city.lat, city.lon], {
               radius: 6,
@@ -121,8 +186,15 @@
             );
 
             marker.on("mouseover", () => speak(city.description));
-            marker.on("mouseout", () => speechSynthesis.cancel());
+            marker.on("mouseout", () => {
+              speechSynthesis.cancel();
+              isSpeaking = false;
+            });
           });
+        })
+        .catch((err) => {
+          console.error("Error loading GeoJSON:", err);
+          alert("Could not load map data.");
         });
     </script>
   </body>
