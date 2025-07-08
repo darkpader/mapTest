@@ -1,29 +1,23 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Company Map with Leaflet</title>
+    <title>Interactive Map with Speech</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <!-- Leaflet CSS & JS -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
     />
     <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
-
-    <!-- Leaflet GeoJSON world boundaries -->
-    <script src="https://unpkg.com/leaflet-ajax"></script>
-
     <style>
       #map {
         height: 100vh;
       }
-      .country-tooltip {
+      .tooltip-style {
         font-size: 14px;
         background: white;
         border: 1px solid gray;
-        padding: 5px;
+        padding: 4px;
       }
     </style>
   </head>
@@ -31,62 +25,104 @@
     <div id="map"></div>
 
     <script>
-      // Initialize map
-      var map = L.map("map").setView([20, 0], 2);
+      const map = L.map("map").setView([20, 0], 2);
 
-      // Add base tile layer
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap contributors",
       }).addTo(map);
 
-      // Example company activity per country (ISO A3 code)
-      const companyActivity = {
+      // Country ISO -> Description
+      const countryDescriptions = {
         SEN: "Hello There",
         AGO: "General Kenobi, you are a bold one",
         CAN: "Back away, I will deal with this Jedi slime myself",
-        ARE: "Your move",
-        EGY: "You fool, I've been trained in your Jedi arts by Count Dooku",
-        GBR: "Attack, Kenobi",
+        EGY: "Your move",
       };
 
-      // Load GeoJSON world boundaries (you can also host your own or fetch dynamically)
+      // Cities with coordinates and descriptions
+      const cityDescriptions = [
+        {
+          name: "London, UK",
+          lat: 51.5074,
+          lon: -0.1278,
+          description:
+            "You fool, I've been trained in your Jedi arts by Count Dooku",
+        },
+        {
+          name: "Dubai, UAE",
+          lat: 25.276987,
+          lon: 55.296249,
+          description: "Attack, Kenobi",
+        },
+      ];
+
+      // Function to speak text
+      function speak(text) {
+        speechSynthesis.cancel(); // Stop previous speech
+        const utter = new SpeechSynthesisUtterance(text);
+        speechSynthesis.speak(utter);
+      }
+
+      // Load GeoJSON country boundaries
       fetch(
         "https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json"
       )
         .then((res) => res.json())
         .then((data) => {
+          // Add countries first
           L.geoJSON(data, {
-            style: function (feature) {
-              return {
-                fillColor: "#74c476",
-                weight: 1,
-                color: "white",
-                fillOpacity: 0.6,
-              };
-            },
-            onEachFeature: function (feature, layer) {
-              const iso = feature.id; // e.g., "USA", "GBR"
-              const name = feature.properties.name;
-              const activity = companyActivity[iso];
+            style: (feature) => ({
+              fillColor: countryDescriptions[feature.id] ? "#3498db" : "#ccc",
+              weight: 1,
+              color: "#fff",
+              fillOpacity: countryDescriptions[feature.id] ? 0.5 : 0.1,
+            }),
+            onEachFeature: (feature, layer) => {
+              const iso = feature.id;
+              const desc = countryDescriptions[iso];
+              if (desc) {
+                layer.bindTooltip(
+                  `<strong>${feature.properties.name}</strong><br>${desc}`,
+                  {
+                    sticky: true,
+                    className: "tooltip-style",
+                  }
+                );
 
-              if (activity) {
-                layer.bindTooltip(`<strong>${name}</strong><br>${activity}`, {
-                  sticky: true,
-                  direction: "top",
-                  className: "country-tooltip",
+                layer.on("mouseover", () => {
+                  layer.setStyle({ fillOpacity: 0.8 });
+                  speak(desc);
                 });
-
-                layer.on({
-                  mouseover: function (e) {
-                    layer.setStyle({ fillOpacity: 0.9 });
-                  },
-                  mouseout: function (e) {
-                    layer.setStyle({ fillOpacity: 0.6 });
-                  },
+                layer.on("mouseout", () => {
+                  layer.setStyle({ fillOpacity: 0.5 });
+                  speechSynthesis.cancel();
                 });
               }
             },
           }).addTo(map);
+
+          // Add city markers after countries so they appear on top
+          cityDescriptions.forEach((city) => {
+            const marker = L.circleMarker([city.lat, city.lon], {
+              radius: 6,
+              fillColor: "#e67e22",
+              color: "#000",
+              weight: 1,
+              opacity: 1,
+              fillOpacity: 0.9,
+            }).addTo(map);
+
+            marker.bindTooltip(
+              `<strong>${city.name}</strong><br>${city.description}`,
+              {
+                sticky: true,
+                className: "tooltip-style",
+              }
+            );
+
+            marker.on("mouseover", () => speak(city.description));
+            marker.on("mouseout", () => speechSynthesis.cancel());
+          });
         });
     </script>
   </body>
